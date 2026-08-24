@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎯 Rilevatore Passaggio</title>
+<style>
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:#0f1117; color:#e8eaf0; font-family:-apple-system,Roboto,'Segoe UI',sans-serif; overflow-x:hidden;}
+  .wrap{display:flex; flex-direction:column; min-height:100vh;}
+  header{padding:14px 16px 10px; text-align:center;}
+  header h1{margin:0; font-size:19px; font-weight:700; letter-spacing:.2px;}
+  header p{margin:4px 0 0; font-size:12.5px; color:#8b93a7;}
+
+  .stage{position:relative; width:100%; aspect-ratio:3/4; background:#000; overflow:hidden;}
+  video{width:100%; height:100%; object-fit:cover; display:block;}
+  canvas.overlay{position:absolute; inset:0; width:100%; height:100%; touch-action:none;}
+
+  .placeholder{position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    flex-direction:column; gap:10px; color:#4a5164; padding:0 30px; text-align:center;}
+  .placeholder .icon{font-size:40px;}
+  .placeholder p{font-size:13.5px; margin:0; line-height:1.5;}
+
+  .controls{padding:14px 16px; display:flex; flex-direction:column; gap:12px;}
+
+  .btn-toggle{border:none; border-radius:14px; padding:15px; font-size:16px; font-weight:700;
+    background:#00e5ff; color:#03181c; cursor:pointer;}
+  .btn-toggle.on{background:#1c2230; color:#ff5a5a; border:1px solid #ff5a5a;}
+
+  .status-row{display:flex; gap:10px; align-items:stretch;}
+  .status-card{flex:1; background:#161a24; border:1px solid #262c3d; border-radius:12px; padding:12px 14px;}
+  .status-card .lbl{font-size:11px; color:#8b93a7; text-transform:uppercase; letter-spacing:.6px;}
+  .status-card .val{font-size:20px; font-weight:700; margin-top:3px; display:flex; align-items:center; gap:7px;}
+  .dot{width:11px; height:11px; border-radius:50%; background:#3a4054; flex-shrink:0;}
+  .dot.libero{background:#00e5ff; box-shadow:0 0 10px #00e5ff;}
+  .dot.occupato{background:#ff5a5a; box-shadow:0 0 10px #ff5a5a;}
+
+  .panel{background:#161a24; border:1px solid #262c3d; border-radius:12px; padding:14px;}
+  .panel .row{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .panel .row:last-child{margin-bottom:0;}
+  .panel label{font-size:13px; color:#c3c8d6;}
+  .panel input[type=range]{width:60%; accent-color:#00e5ff;}
+  .panel .num{font-size:12.5px; color:#8b93a7; min-width:34px; text-align:right;}
+
+  .hint{font-size:12px; color:#6b7286; text-align:center; padding:0 10px; line-height:1.5;}
+
+  .resetbtn{background:transparent; border:1px solid #3a4054; color:#c3c8d6; border-radius:10px;
+    padding:9px; font-size:13px; cursor:pointer;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>🎯 Rilevatore Passaggio</h1>
+    <p>Prototipo — allinea il riquadro sulla striscia rossa</p>
+  </header>
+
+  <div class="stage" id="stage">
+    <video id="video" playsinline muted></video>
+    <canvas class="overlay" id="overlay"></canvas>
+    <div class="placeholder" id="placeholder">
+      <div class="icon">📷</div>
+      <p>Fotocamera spenta.<br>Tocca "Attiva fotocamera" qui sotto.</p>
+    </div>
+  </div>
+
+  <div class="controls">
+
+    <button class="btn-toggle" id="toggleBtn">▶ Attiva fotocamera</button>
+
+    <div class="status-row">
+      <div class="status-card">
+        <div class="lbl">Cancelletto</div>
+        <div class="val"><span class="dot" id="statusDot"></span><span id="statusText">—</span></div>
+      </div>
+      <div class="status-card">
+        <div class="lbl">Passaggi rilevati</div>
+        <div class="val"><span id="countVal">0</span></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="row">
+        <label>Sensibilità rosso</label>
+        <input type="range" id="sensSlider" min="5" max="60" value="18">
+        <span class="num" id="sensVal">18%</span>
+      </div>
+      <div class="row">
+        <label>Riquadro largo</label>
+        <input type="range" id="wSlider" min="5" max="60" value="18">
+        <span class="num" id="wVal">18%</span>
+      </div>
+      <div class="row">
+        <label>Riquadro alto</label>
+        <input type="range" id="hSlider" min="5" max="60" value="18">
+        <span class="num" id="hVal">18%</span>
+      </div>
+    </div>
+
+    <button class="resetbtn" id="resetCount">↺ Azzera contatore</button>
+
+    <p class="hint">
+      Trascina il riquadro ciano sopra la striscia rossa di riferimento.
+      "Libero" = rosso visibile tra due carrozze. "Occupato" = una carrozza
+      sta coprendo la striscia in questo momento.
+    </p>
+  </div>
+
+</div>
+
+<script>
+const video=document.getElementById('video');
+const overlay=document.getElementById('overlay');
+const ctx=overlay.getContext('2d');
+const stage=document.getElementById('stage');
+const placeholder=document.getElementById('placeholder');
+const toggleBtn=document.getElementById('toggleBtn');
+const statusDot=document.getElementById('statusDot');
+const statusText=document.getElementById('statusText');
+const countVal=document.getElementById('countVal');
+const resetCount=document.getElementById('resetCount');
+const sensSlider=document.getElementById('sensSlider');
+const sensVal=document.getElementById('sensVal');
+const wSlider=document.getElementById('wSlider');
+const wVal=document.getElementById('wVal');
+const hSlider=document.getElementById('hSlider');
+const hVal=document.getElementById('hVal');
+
+let stream=null;
+let running=false;
+let rafId=null;
+let count=0;
+let wasOccupato=false;
+
+let box={ x:0.41, y:0.55, w:0.18, h:0.18 };
+
+let dragging=false, dragOffsetX=0, dragOffsetY=0;
+
+function resizeCanvas(){
+  overlay.width=stage.clientWidth;
+  overlay.height=stage.clientHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+
+function boxPixels(){
+  const w=overlay.width, h=overlay.height;
+  return {
+    x: box.x*w, y: box.y*h,
+    w: box.w*w, h: box.h*h
+  };
+}
+
+function drawOverlay(occupato){
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+  const b=boxPixels();
+  ctx.strokeStyle = occupato ? '#ff5a5a' : '#00e5ff';
+  ctx.lineWidth=3;
+  ctx.setLineDash([6,4]);
+  ctx.strokeRect(b.x,b.y,b.w,b.h);
+  ctx.setLineDash([]);
+  ctx.fillStyle = occupato ? '#ff5a5a' : '#00e5ff';
+  ctx.fillRect(b.x+b.w-10, b.y+b.h-10, 14,14);
+}
+
+function pointFromEvent(e){
+  const rect=overlay.getBoundingClientRect();
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX-rect.left, y: t.clientY-rect.top };
+}
+
+let resizing=false;
+
+overlay.addEventListener('touchstart', onDown, {passive:false});
+overlay.addEventListener('mousedown', onDown);
+
+function onDown(e){
+  e.preventDefault();
+  const p=pointFromEvent(e);
+  const b=boxPixels();
+  const handleX=b.x+b.w, handleY=b.y+b.h;
+  if(Math.hypot(p.x-handleX, p.y-handleY) < 26){
+    resizing=true;
+  } else if(p.x>=b.x && p.x<=b.x+b.w && p.y>=b.y && p.y<=b.y+b.h){
+    dragging=true;
+    dragOffsetX = p.x-b.x;
+    dragOffsetY = p.y-b.y;
+  }
+}
+
+window.addEventListener('touchmove', onMove, {passive:false});
+window.addEventListener('mousemove', onMove);
+
+function onMove(e){
+  if(!dragging && !resizing) return;
+  e.preventDefault();
+  const p=pointFromEvent(e);
+  const w=overlay.width, h=overlay.height;
+  if(dragging){
+    let nx=(p.x-dragOffsetX)/w, ny=(p.y-dragOffsetY)/h;
+    nx=Math.max(0, Math.min(1-box.w, nx));
+    ny=Math.max(0, Math.min(1-box.h, ny));
+    box.x=nx; box.y=ny;
+  } else if(resizing){
+    let nw=(p.x/w)-box.x, nh=(p.y/h)-box.y;
+    box.w=Math.max(0.05, Math.min(1-box.x, nw));
+    box.h=Math.max(0.05, Math.min(1-box.y, nh));
+    wSlider.value=Math.round(box.w*100); wVal.textContent=wSlider.value+'%';
+    hSlider.value=Math.round(box.h*100); hVal.textContent=hSlider.value+'%';
+  }
+}
+window.addEventListener('touchend', ()=>{dragging=false; resizing=false;});
+window.addEventListener('mouseup', ()=>{dragging=false; resizing=false;});
+
+wSlider.oninput=()=>{ box.w=wSlider.value/100; wVal.textContent=wSlider.value+'%'; };
+hSlider.oninput=()=>{ box.h=hSlider.value/100; hVal.textContent=hSlider.value+'%'; };
+sensSlider.oninput=()=>{ sensVal.textContent=sensSlider.value+'%'; };
+
+const sampleCanvas=document.createElement('canvas');
+const sampleCtx=sampleCanvas.getContext('2d', {willReadFrequently:true});
+
+function analyzeFrame(){
+  if(!running) return;
+  if(video.videoWidth){
+    sampleCanvas.width=video.videoWidth;
+    sampleCanvas.height=video.videoHeight;
+    sampleCtx.drawImage(video,0,0);
+
+    const vw=video.videoWidth, vh=video.videoHeight;
+    const sw=stage.clientWidth, sh=stage.clientHeight;
+    const scale=Math.max(sw/vw, sh/vh);
+    const dispW=vw*scale, dispH=vh*scale;
+    const offX=(dispW-sw)/2, offY=(dispH-sh)/2;
+
+    const bx=(box.x*sw + offX)/scale;
+    const by=(box.y*sh + offY)/scale;
+    const bw=(box.w*sw)/scale;
+    const bh=(box.h*sh)/scale;
+
+    const rx=Math.max(0,Math.round(bx)), ry=Math.max(0,Math.round(by));
+    const rw=Math.min(vw-rx,Math.round(bw)), rh=Math.min(vh-ry,Math.round(bh));
+
+    let redRatio=0;
+    if(rw>0 && rh>0){
+      const data=sampleCtx.getImageData(rx,ry,rw,rh).data;
+      let redCount=0, total=0;
+      for(let i=0;i<data.length;i+=16){
+        const r=data[i], g=data[i+1], b=data[i+2];
+        if(r>110 && r-g>35 && r-b>35) redCount++;
+        total++;
+      }
+      redRatio = total>0 ? redCount/total : 0;
+    }
+
+    const threshold=sensSlider.value/100;
+    const occupato = redRatio < threshold;
+
+    statusDot.className='dot '+(occupato?'occupato':'libero');
+    statusText.textContent = occupato ? 'OCCUPATO' : 'LIBERO';
+
+    if(occupato && !wasOccupato){
+      count++;
+      countVal.textContent=count;
+    }
+    wasOccupato=occupato;
+
+    drawOverlay(occupato);
+  }
+  rafId=requestAnimationFrame(analyzeFrame);
+}
+
+resetCount.onclick=()=>{ count=0; countVal.textContent=0; };
+
+async function startCamera(){
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:960} },
+      audio:false
+    });
+    video.srcObject=stream;
+    await video.play();
+    placeholder.style.display='none';
+    resizeCanvas();
+    running=true;
+    wasOccupato=false;
+    toggleBtn.textContent='■ Disattiva fotocamera';
+    toggleBtn.classList.add('on');
+    analyzeFrame();
+  }catch(err){
+    placeholder.querySelector('p').textContent=
+      'Impossibile accedere alla fotocamera.\nControlla i permessi, e che la pagina sia aperta con https (non file locale).';
+    placeholder.style.display='flex';
+  }
+}
+
+function stopCamera(){
+  running=false;
+  if(rafId) cancelAnimationFrame(rafId);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  video.srcObject=null;
+  placeholder.style.display='flex';
+  placeholder.querySelector('p').textContent='Fotocamera spenta.\nTocca "Attiva fotocamera" qui sotto.';
+  toggleBtn.textContent='▶ Attiva fotocamera';
+  toggleBtn.classList.remove('on');
+  statusDot.className='dot';
+  statusText.textContent='—';
+  ctx.clearRect(0,0,overlay.width,overlay.height);
+}
+
+toggleBtn.onclick=()=>{
+  if(running) stopCamera(); else startCamera();
+};
+
+resizeCanvas();
+</script>
+</body>
+</html>
