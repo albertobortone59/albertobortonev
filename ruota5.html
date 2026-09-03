@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>🎡 Ruota Panoramica</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="theme-color" content="#0f1117">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ruota">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  :root{
+    --bg:#0f1117;--surface:#1a1d27;--surface2:#22263a;--border:#2e3250;
+    --accent:#4f8ef7;--green:#2ecc71;--orange:#f39c12;--red:#e74c3c;
+    --text:#e8eaf0;--muted:#6b7199;
+  }
+  html,body{height:100%;overflow:hidden;}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;display:flex;flex-direction:column;}
+
+  /* HEADER */
+  header{background:var(--surface);border-bottom:1px solid var(--border);padding:5px 8px;display:flex;align-items:center;gap:5px;flex-shrink:0;flex-wrap:wrap;}
+  header .logo{font-size:16px;}
+  .sg{display:flex;align-items:center;gap:3px;}
+  .sg label{font-size:10px;color:var(--muted);}
+  .sg input{background:var(--surface2);border:1px solid var(--border);border-radius:5px;color:var(--text);font-size:12px;font-weight:700;width:38px;padding:3px;text-align:center;}
+  .sg input:focus{outline:none;border-color:var(--accent);}
+  .abtn{background:var(--surface2);border:1px solid var(--border);color:var(--accent);border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;}
+  .abtn:active{background:var(--accent);color:#fff;}
+  .sinfo{font-size:10px;color:var(--accent);font-weight:600;}
+  .reset-btn{background:#2a2a2a;border:1px solid #555;color:#f39c12;border-radius:5px;padding:4px 7px;font-size:10px;font-weight:700;cursor:pointer;margin-left:auto;}
+
+  /* --- PANNELLO RILEVAMENTO AUTOMATICO (FOTOCAMERA) --- */
+  .cam-toggle-btn{background:var(--surface2);border:1px solid var(--border);color:var(--muted);border-radius:5px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer;}
+  .cam-toggle-btn.active{border-color:var(--accent);color:var(--accent);}
+  .cam-panel{
+    position:fixed;inset:0;z-index:600;background:var(--bg);
+    padding:10px 12px;overflow-y:auto;
+    display:flex;flex-direction:column;
+    visibility:hidden;opacity:0;pointer-events:none;
+  }
+  .cam-panel.open{
+    visibility:visible;opacity:1;pointer-events:auto;
+  }
+  .cam-header-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px;flex-shrink:0;}
+  .cam-header-row span{font-weight:800;font-size:14px;}
+  .cam-done-btn{background:var(--green);border:none;color:#fff;border-radius:9px;padding:9px 14px;font-size:12.5px;font-weight:800;cursor:pointer;}
+  .cam-stage{position:relative;width:100%;aspect-ratio:4/3;background:#000;border-radius:10px;overflow:hidden;flex-shrink:0;}
+  .cam-stage video{width:100%;height:100%;object-fit:cover;display:block;}
+  .cam-stage canvas{position:absolute;inset:0;width:100%;height:100%;touch-action:none;}
+  .cam-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;text-align:center;padding:0 20px;}
+  .cam-row{display:flex;gap:8px;align-items:center;margin-top:8px;flex-wrap:wrap;}
+  .cam-btn{flex:1;border:none;border-radius:9px;padding:10px;font-size:13px;font-weight:700;background:var(--accent);color:#fff;cursor:pointer;min-width:120px;}
+  .cam-btn.on{background:var(--surface2);color:var(--red);border:1px solid var(--red);}
+  .cam-status{display:flex;gap:8px;margin-top:8px;}
+  .cam-card{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:8px 10px;}
+  .cam-card .l{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;}
+  .cam-card .v{font-size:15px;font-weight:800;margin-top:2px;display:flex;align-items:center;gap:6px;}
+  .cam-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex-shrink:0;}
+  .cam-dot.libero{background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .cam-dot.occupato{background:var(--red);box-shadow:0 0 8px var(--red);}
+  .cam-mini{font-size:11px;color:var(--muted);margin-top:8px;line-height:1.5;}
+  .cam-mini label{color:var(--text);}
+  .cam-mini input[type=number]{width:46px;background:var(--surface2);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:3px 5px;font-size:12px;}
+  .cam-mini input[type=range]{width:90px;vertical-align:middle;accent-color:var(--accent);}
+  .cam-auto-row{display:flex;align-items:center;gap:8px;margin-top:8px;background:var(--surface2);border:1px solid var(--border);border-radius:9px;padding:8px 10px;}
+  .cam-auto-row input[type=checkbox]{width:17px;height:17px;accent-color:var(--accent);}
+  .cam-auto-row .lab{font-size:12.5px;font-weight:600;}
+  .cam-auto-row .sub{font-size:10.5px;color:var(--muted);}
+  .cam-counter{display:flex;gap:8px;margin-top:8px;}
+  .cam-counter .cam-card{text-align:center;}
+  .cam-counter .v{font-size:22px;justify-content:center;}
+  .reset-btn:active{background:var(--red);color:#fff;}
+
+  /* RUOTA WIDGET */
+  .wheel-wrap{
+    flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);
+    display:flex;justify-content:center;align-items:center;
+    padding:6px;cursor:pointer;
+    transition:all .3s ease;
+    position:relative;
+  }
+  .wheel-wrap.mini{height:130px;}
+  .wheel-wrap.full{
+    position:fixed;inset:0;z-index:500;background:rgba(10,10,15,.96);
+    height:auto;padding:20px;
+  }
+  .wheel-wrap canvas{display:block;}
+  .wheel-hint{
+    position:absolute;bottom:4px;right:6px;
+    font-size:9px;color:var(--muted);pointer-events:none;
+  }
+  .wheel-wrap.full .wheel-overlay{
+    position:absolute;bottom:8px;left:50%;transform:translateX(-50%);
+    display:flex;gap:8px;align-items:center;z-index:10;
+  }
+  .wheel-wrap.mini .wheel-overlay{display:none;}
+  .wheel-cam-bar{display:none;}
+  .wheel-wrap.full .wheel-cam-bar{
+    display:flex;position:absolute;top:14px;left:50%;transform:translateX(-50%);
+    gap:10px;align-items:center;z-index:10;background:rgba(20,22,35,.85);
+    border:1px solid var(--border);border-radius:10px;padding:7px 12px;
+  }
+  .wheel-cam-info{display:flex;flex-direction:column;line-height:1.15;}
+  .wheel-cam-info .l{font-size:9.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.4px;}
+  .wheel-cam-info .v{font-size:16px;font-weight:900;color:#00e5ff;}
+  .wheel-cam-btn{border:2px solid #555;border-radius:8px;background:#2a2a2a;color:var(--muted);
+    font-size:12px;font-weight:800;padding:7px 10px;cursor:pointer;white-space:nowrap;}
+  .wheel-cam-btn.active{background:#003344;border-color:#00e5ff;color:#00e5ff;}
+  .wheel-cam-dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;margin-left:6px;vertical-align:middle;}
+  .wheel-cam-dot.libero{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+  .wheel-cam-dot.occupato{background:var(--red);box-shadow:0 0 6px var(--red);}
+  .wheel-cam-calib-btn{border:2px solid #555;border-radius:8px;background:#2a2a2a;color:var(--muted);
+    font-size:14px;font-weight:800;padding:7px 9px;cursor:pointer;}
+  .wheel-cam-calib-btn.active{background:#003344;border-color:#00e5ff;color:#00e5ff;}
+  .wheel-big-btn{
+    padding:7px 18px;border:none;border-radius:8px;
+    font-size:13px;font-weight:900;cursor:pointer;white-space:nowrap;
+  }
+  .wheel-big-btn.running{background:var(--green);color:#fff;}
+  .wheel-big-btn.paused{background:var(--orange);color:#fff;}
+  .wheel-big-btn:active{opacity:.8;}
+  .wheel-sync-btn{
+    padding:7px 14px;border:2px solid #555;border-radius:8px;
+    background:#2a2a2a;color:#f39c12;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap;
+  }
+  .wheel-sync-btn.active{background:#003344;border-color:#00e5ff;color:#00e5ff;}
+  .wheel-sync-btn:active{opacity:.75;}
+
+  /* GRIGLIA */
+  .grid-wrap{flex:1;overflow-y:auto;padding:2px 1px 2px;}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;}
+
+  /* CARD */
+  .card-top{display:flex;align-items:center;justify-content:center;gap:4px;width:100%;}
+  .cn{font-size:24px;font-weight:900;line-height:1;color:#fff;}
+  .cl{font-size:17px;font-weight:900;line-height:1;}
+  .ct{font-size:10px;font-weight:700;line-height:1;}
+  .card{
+    background:var(--surface);border:2px solid var(--border);border-radius:6px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:1px;cursor:pointer;user-select:none;position:relative;
+    min-height:70px;transition:border-color .15s,background .15s;padding:3px 1px;
+  }
+  .plus-btn{
+    width:26px;height:26px;border-radius:5px;border:none;font-size:18px;font-weight:900;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+    background:rgba(255,255,255,.15);color:#fff;opacity:0;pointer-events:none;
+  }
+  .card.run .plus-btn{opacity:1;pointer-events:auto;background:rgba(46,204,113,.3);}
+  .card.run .plus-btn:active{background:rgba(46,204,113,.7);}
+  .card.run .plus-btn.used{opacity:.25;pointer-events:none;}
+
+  .card.sel{border-color:var(--accent);background:#0d1a38;}
+  .card.sel .cl,.card.sel .ct{color:var(--accent);}
+  .card.run{border-color:var(--green);background:#0a1f12;}
+  .card.run .cn{color:#fff;}
+  .card.run .cl,.card.run .ct{color:var(--green);}
+  .card.pau{border-color:var(--orange);background:#1f1400;}
+  .card.pau .cn{color:var(--orange);}
+  .card.pau .cl,.card.pau .ct{color:var(--orange);}
+  .card.new{border-color:var(--accent);background:#0d1a38;}
+  .card.new .cl,.card.new .ct{color:var(--accent);}
+  .card.excl{border-color:#e6c200;background:#211c00;}
+  .card.excl .cn{color:#e6c200;}
+  .card.excl .ct{color:#e6c200;}
+  .card.warn{border-color:#ff2200;animation:flash .45s ease-in-out infinite alternate;}
+  .card.warn .cn{color:#ff3300;}
+  .card.warn .cl,.card.warn .ct{color:#ff3300;}
+  @keyframes flash{
+    from{background:#0a1f12;box-shadow:0 0 4px rgba(255,34,0,.2);}
+    to  {background:#2d0800;box-shadow:0 0 22px rgba(255,34,0,.7);}
+  }
+  .card.off{opacity:.18;pointer-events:none;border-color:var(--border);}
+  .card.off .cn{color:var(--muted);}
+  .card.sync-target{border-color:#00e5ff;animation:syncPulse .5s ease-in-out infinite alternate;}
+  .card.sync-target .plus-btn{opacity:.15;}
+  @keyframes syncPulse{
+    from{box-shadow:0 0 4px rgba(0,229,255,.2);}
+    to  {box-shadow:0 0 20px rgba(0,229,255,.7);}
+  }
+
+  /* BOTTOM */
+  .bottom{flex-shrink:0;padding:5px 8px;display:flex;flex-direction:column;gap:5px;}
+  .sync-row{display:flex;align-items:center;gap:8px;}
+  .sync-btn{flex:1;padding:10px;border:2px solid #555;border-radius:9px;background:#2a2a2a;color:#f39c12;font-size:13px;font-weight:800;cursor:pointer;transition:all .2s;}
+  .sync-btn.active{background:#003344;border-color:#00e5ff;color:#00e5ff;animation:syncBtnPulse .6s ease-in-out infinite alternate;}
+  @keyframes syncBtnPulse{from{box-shadow:0 0 4px rgba(0,229,255,.2);}to{box-shadow:0 0 16px rgba(0,229,255,.6);}}
+  .sync-btn:active{opacity:.75;}
+  .sync-countdown{font-size:20px;font-weight:900;color:#00e5ff;width:28px;text-align:center;display:none;}
+  .sync-countdown.on{display:block;}
+  .big{width:100%;padding:14px;border:none;border-radius:11px;font-size:18px;font-weight:900;cursor:pointer;transition:background .2s;}
+  .big.running{background:var(--green);color:#fff;}
+  .big.paused{background:var(--orange);color:#fff;}
+  .big:active{opacity:.8;transform:scale(.98);}
+
+  /* TOAST */
+  #toasts{position:fixed;bottom:130px;left:50%;transform:translateX(-50%);z-index:999;display:flex;flex-direction:column;gap:5px;align-items:center;pointer-events:none;}
+  .toast{background:#333;color:#fff;font-weight:700;font-size:13px;padding:8px 16px;border-radius:9px;box-shadow:0 4px 18px rgba(0,0,0,.4);animation:su .25s ease;white-space:nowrap;}
+  .toast.g{background:var(--green);}
+  .toast.c{background:#006677;}
+  @keyframes su{from{opacity:0;transform:translateY(10px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body>
+
+<header>
+  <span class="logo">🎡</span>
+  <div class="sg"><label>Giro:</label><input type="number" id="lapMin" value="1" min="0" max="59"><label>m</label><input type="number" id="lapSec" value="30" min="0" max="59"><label>s</label></div>
+  <div class="sg"><label>Giri:</label><input type="number" id="gLapsInp" value="4" min="1" max="30"></div>
+  <div class="sg"><label>Carr.:</label><input type="number" id="nCarsInp" value="16" min="1" max="30"></div>
+  <button class="abtn" onclick="applySettings()">✓</button>
+  <div class="sinfo" id="sinfo"></div>
+  <button class="reset-btn" onclick="resetAll()">↺ RESET</button>
+</header>
+
+<!-- PANNELLO RILEVAMENTO AUTOMATICO PASSAGGIO (FOTOCAMERA) -->
+<div class="cam-panel" id="camPanel">
+  <div class="cam-header-row">
+    <span>📷 Rilevamento automatico</span>
+    <button class="cam-done-btn" onclick="toggleCamPanel()">✓ Fatto, torna alla ruota</button>
+  </div>
+  <div class="cam-stage" id="camStage">
+    <video id="camVideo" playsinline muted></video>
+    <canvas id="camOverlay"></canvas>
+    <div class="cam-placeholder" id="camPlaceholder">📷 Fotocamera spenta</div>
+  </div>
+  <div class="cam-mini">
+    📷 La fotocamera si accende e si spegne dal tasto sincronia sulla
+    ruota ingrandita. Qui puoi solo centrare il riquadro sul riferimento
+    rosso e regolare la sensibilità.
+  </div>
+  <div class="cam-mini">
+    Sensibilità rosso <input type="range" id="camSens" min="5" max="60" value="18">
+  </div>
+  <div class="cam-row">
+    <button class="cam-btn" id="camResetBtn" onclick="camReset()">↺ Reset conteggio giri/passaggi</button>
+  </div>
+</div>
+
+<!-- RUOTA ANIMATA -->
+<div class="wheel-wrap mini" id="wheelWrap" onclick="handleWheelClick(event)">
+  <canvas id="wheelCanvas"></canvas>
+  <div class="wheel-hint">tocca per ingrandire</div>
+  <div class="wheel-cam-bar" onclick="event.stopPropagation()">
+    <div class="wheel-cam-info">
+      <span class="l">Carrozza a SX</span>
+      <span class="v">#<span id="wheelCamNum">—</span><span class="wheel-cam-dot" id="wheelCamDot"></span></span>
+    </div>
+    <button class="wheel-cam-btn" id="wheelCamBtn" onclick="toggleCamFromWheel(event)">📷 MANUALE</button>
+    <button class="wheel-cam-calib-btn" id="wheelCamCalibBtn" onclick="toggleCamPanel(event)">⚙</button>
+  </div>
+  <div class="wheel-overlay">
+    <button class="wheel-sync-btn" id="wheelSyncBtn" onclick="toggleWheelSync(event)">🔄 SYNC</button>
+    <button class="wheel-big-btn paused" id="wheelMainBtn" onclick="mainAction();event.stopPropagation()">⏸ IN PAUSA</button>
+  </div>
+</div>
+
+<div class="grid-wrap"><div class="grid" id="grid"></div></div>
+
+<div class="bottom">
+  <div class="sync-row">
+    <button class="sync-btn" id="syncBtn" onclick="startSync()">🔄 SINCRONIZZA</button>
+    <div class="sync-countdown" id="syncCountdown">3</div>
+  </div>
+  <button class="big paused" id="mainBtn" onclick="mainAction()">⏸  IN PAUSA</button>
+</div>
+
+<div id="toasts"></div>
+
+<script>
+const N=30;
+let lapMs=90000, gLaps=4, nCars=16, gPaused=true;
+let cars=[];
+let syncActive=false, syncTimer=null, syncCountVal=3, syncInterval=null;
+let wheelFull=false;
+
+function initCars(){
+  cars=Array.from({length:N},(_,i)=>({
+    id:i+1, state:'free', remainingMs:null, warned:false,
+    totalLaps:gLaps, startedAt:null, remainingAtStart:null, pausedRemaining:null,
+    lapAdded:false
+  }));
+}
+
+/* AUDIO */
+let actx=null;
+function getA(){
+  if(!actx) actx=new(window.AudioContext||window.webkitAudioContext)();
+  if(actx.state==='suspended') actx.resume();
+  return actx;
+}
+document.addEventListener('touchstart',()=>getA(),{once:true});
+document.addEventListener('click',()=>getA(),{once:true});
+
+const warnOsc={}; // id carrozza -> oscillatori del suo allarme attualmente in corso
+
+function stopWarnBeep(id){
+  const arr=warnOsc[id];
+  if(arr){ arr.forEach(o=>{ try{ o.stop(); }catch(e){} }); }
+  warnOsc[id]=[];
+}
+
+function beep(type, carId){
+  try{
+    const A=getA();
+    if(type==='warn'){
+      // Se questa carrozza aveva già un allarme in corso (es. dopo un
+      // ciclo pausa/ripresa), lo fermo prima di avviarne uno nuovo,
+      // altrimenti si accumulano sequenze sovrapposte che continuano
+      // a suonare ben oltre il dovuto.
+      if(carId!=null) stopWarnBeep(carId);
+      const arr=[];
+      for(let i=0;i<40;i++){
+        const o=A.createOscillator(),g=A.createGain();
+        o.connect(g);g.connect(A.destination);
+        o.type='square';
+        o.frequency.setValueAtTime(2800,A.currentTime+i*.5);
+        o.frequency.setValueAtTime(3200,A.currentTime+i*.5+.08);
+        o.frequency.setValueAtTime(2800,A.currentTime+i*.5+.16);
+        g.gain.setValueAtTime(1.0,A.currentTime+i*.5);
+        g.gain.exponentialRampToValueAtTime(0.001,A.currentTime+i*.5+.35);
+        o.start(A.currentTime+i*.5);o.stop(A.currentTime+i*.5+.35);
+        arr.push(o);
+      }
+      if(carId!=null) warnOsc[carId]=arr;
+    } else {
+      const o=A.createOscillator(),g=A.createGain();
+      o.connect(g);g.connect(A.destination);
+      o.type='sine';o.frequency.value=880;
+      g.gain.setValueAtTime(.6,A.currentTime);
+      g.gain.exponentialRampToValueAtTime(.001,A.currentTime+.5);
+      o.start();o.stop(A.currentTime+.5);
+    }
+  }catch(e){}
+}
+
+/* TOAST */
+function toast(msg,cls='',dur=3500){
+  const c=document.getElementById('toasts');
+  const t=document.createElement('div');
+  t.className='toast '+(cls);t.textContent=msg;
+  c.appendChild(t);setTimeout(()=>t.remove(),dur);
+}
+
+/* SETTINGS */
+function updateInfo(){
+  const m=parseInt(document.getElementById('lapMin').value)||0;
+  const s=parseInt(document.getElementById('lapSec').value)||0;
+  const l=parseInt(document.getElementById('gLapsInp').value)||1;
+  const tot=l*(m*60+s),tm=Math.floor(tot/60),ts=tot%60;
+  document.getElementById('sinfo').textContent=`${l}×${m}:${String(s).padStart(2,'0')}=${tm}:${String(ts).padStart(2,'0')}`;
+}
+function applySettings(){
+  const m=parseInt(document.getElementById('lapMin').value)||0;
+  const s=parseInt(document.getElementById('lapSec').value)||0;
+  const l=parseInt(document.getElementById('gLapsInp').value)||1;
+  const n=parseInt(document.getElementById('nCarsInp').value)||16;
+  if((m*60+s)<5){toast('Min 5 sec','',2000);return;}
+  lapMs=(m*60+s)*1000; gLaps=l; nCars=n;
+  localStorage.setItem('rp_m',m);localStorage.setItem('rp_s',s);
+  localStorage.setItem('rp_l',l);localStorage.setItem('rp_n',n);
+  updateInfo(); renderAll();
+}
+function loadSettings(){
+  const m=localStorage.getItem('rp_m'),s=localStorage.getItem('rp_s');
+  const l=localStorage.getItem('rp_l'),n=localStorage.getItem('rp_n');
+  if(m) document.getElementById('lapMin').value=m;
+  if(s) document.getElementById('lapSec').value=s;
+  if(l) document.getElementById('gLapsInp').value=l;
+  if(n) document.getElementById('nCarsInp').value=n;
+  applySettings();
+}
+['lapMin','lapSec','gLapsInp','nCarsInp'].forEach(id=>
+  document.getElementById(id).addEventListener('input',updateInfo)
+);
+
+/* RUOTA ANIMATA */
+/* SINCRONIZZAZIONE VISIVA RUOTA */
+let wheelSyncActive=false;
+
+function toggleWheelSync(e){
+  e.stopPropagation();
+  wheelSyncActive=!wheelSyncActive;
+  const btn=document.getElementById('wheelSyncBtn');
+  if(wheelSyncActive){
+    btn.classList.add('active');
+    btn.textContent='🔄 tocca carrozza';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent='🔄 SYNC';
+  }
+}
+
+/* Esegue la sincronizzazione completa: allinea la ruota grafica e
+   ricalibra i tempi di TUTTE le carrozze attive della STESSA quantità
+   (stesso scarto), così le distanze temporali tra le carrozze restano
+   invariate e NESSUN giro viene perso o guadagnato artificialmente:
+   si corregge solo la deriva reale accumulata (tempi morti, click in
+   ritardo, ecc.), esattamente come farebbe la ruota vera, che continua
+   a girare mantenendo i tempi. */
+function performSync(refId, now, targetAngle, refTime){
+  const i=refId-1;
+  const slotAngle=(1/nCars)*Math.PI*2;
+  const entryL=Math.PI/2+slotAngle*0.5;
+  const baseAngle=entryL-(i/nCars)*Math.PI*2;
+  const target=(typeof targetAngle==='number')?targetAngle:entryL; // default: cancelletto SX
+  const angleTime=(typeof refTime==='number')?refTime:now; // default: "adesso"
+  const currentGlobalAngle=getWheelAngle(angleTime);
+  const actualAngle=baseAngle+currentGlobalAngle;
+
+  // Correzione angolare minima (-π..+π): negativa se la carrozza è
+  // già oltre il target (torna indietro), positiva se deve ancora
+  // arrivarci (scatta avanti).
+  let deltaAngle=target-actualAngle;
+  deltaAngle=((deltaAngle+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;
+
+  // Tempo equivalente allo scarto angolare: scatto avanti = più tempo
+  // reale è già trascorso = il tempo rimanente diminuisce; ritorno
+  // indietro = meno tempo è trascorso di quanto pensavamo = il tempo
+  // rimanente aumenta.
+  const deltaTime=(deltaAngle/(Math.PI*2))*lapMs;
+
+  // 1) Correggo l'angolo assoluto della ruota, calcolato ALL'ISTANTE
+  //    "adesso" corrente (non a refTime) sommando lo stesso delta
+  //    trovato: la correzione è un semplice scarto di fase, uguale in
+  //    ogni istante. Fisso il valore assoluto (non sommo solo il
+  //    delta a wheelPausedAngle) perché subito dopo azzero il
+  //    riferimento temporale (startedAt=now) di ogni carrozza: se non
+  //    "congelassi" qui la rotazione già maturata, andrebbe persa.
+  wheelPausedAngle=getWheelAngle(now)+deltaAngle;
+  firstCarSelected=true;
+
+  // 2) Applico la STESSA correzione temporale a ogni carrozza attiva.
+  //    Nessun ricalcolo "a giri interi": si trasla solo la fase, i
+  //    giri rimasti restano quelli reali, invariati salvo la piccola
+  //    correzione di deriva.
+  let synced=0;
+  cars.forEach(c=>{
+    if(c.state!=='run'&&c.state!=='warn'&&c.state!=='pau') return;
+    const remCurrent=c.state==='pau'
+      ? (c.pausedRemaining||0)
+      : Math.max(0,c.remainingAtStart-(now-c.startedAt));
+    const newRem=remCurrent-deltaTime;
+    if(newRem<=0){
+      c.state='free';c.warned=false;c.remainingMs=null;c.startedAt=null;
+      stopWarnBeep(c.id);
+      beep('done');synced++;return;
+    }
+    if(c.state==='pau'){ c.pausedRemaining=newRem; }
+    else { c.remainingAtStart=newRem; c.startedAt=now; }
+    // Esce dallo stato "in scadenza" (rosso/lampeggiante) SOLO se il
+    // sincro le ha davvero ridato più di 20 secondi. Se è ancora
+    // dentro l'ultimo tratto, deve restare rossa e continuare a
+    // lampeggiare/suonare normalmente — altrimenti il sincro
+    // interromperebbe a metà l'allarme di una carrozza in arrivo.
+    if(newRem>20000){
+      c.warned=false;
+      if(c.state==='warn'){ c.state='run'; stopWarnBeep(c.id); }
+    }
+    synced++;
+  });
+  return synced;
+}
+
+/* Sincronizzazione dal tocco diretto sulla ruota disegnata (SYNC + tocco carrozza) */
+function doWheelSync(carIdx){
+  const refId=carIdx+1;
+  const now=Date.now();
+  const synced=performSync(refId, now);
+
+  wheelSyncActive=false;
+  const btn=document.getElementById('wheelSyncBtn');
+  if(btn){btn.classList.remove('active');btn.textContent='🔄 SYNC';}
+  toast(`🔄 Carrozza ${refId} portata a ore 6 (${synced} agg.)`,'c',2500);
+  renderAll();
+}
+
+/* Sincronizzazione dal pulsante in basso (SINCRONIZZA + tocco numero) */
+function doSync(refId){
+  const now=Date.now();
+  const synced=performSync(refId, now);
+  cancelSync();
+  toast(`🔄 Carrozza ${refId} portata a ore 6 (${synced} agg.)`,'c',2500);
+  renderAll();
+}
+
+function toggleWheel(){
+  wheelFull=!wheelFull;
+  const w=document.getElementById('wheelWrap');
+  const hint=w.querySelector('.wheel-hint');
+  if(wheelFull){
+    w.className='wheel-wrap full';
+    hint.textContent='tocca sfondo per ridurre';
+  } else {
+    w.className='wheel-wrap mini';
+    hint.textContent='tocca per ingrandire';
+  }
+  drawWheel();
+}
+
+function handleWheelClick(e){
+  if(!wheelFull){ toggleWheel(); return; }
+  const canvas=document.getElementById('wheelCanvas');
+  const rect=canvas.getBoundingClientRect();
+  // usa coordinate touch se disponibili, altrimenti mouse
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  const mx=clientX-rect.left;
+  const my=clientY-rect.top;
+  const size=canvas.width;
+  const cx=size/2, cy=size/2;
+  const R=size*0.38;
+  const cr=size*0.068;
+
+  // Congela l'angolo ESATTO in questo millisecondo
+  const frozenAngle=getWheelAngle();
+
+  const slotAngle=(1/nCars)*Math.PI*2;
+  const entryL=Math.PI/2+slotAngle*0.5;
+
+  let hit=false;
+  for(let i=0;i<nCars;i++){
+    const baseAngle=entryL-(i/nCars)*Math.PI*2;
+    const angle=baseAngle+frozenAngle;
+    const x=cx+R*Math.cos(angle);
+    const y=cy+R*Math.sin(angle);
+    const dist=Math.sqrt((mx-x)**2+(my-y)**2);
+    const r=cr*1.5;
+    if(dist<r){
+      if(wheelSyncActive){
+        doWheelSync(i);
+      } else {
+        tap(i+1);
+      }
+      hit=true;
+      break;
+    }
+  }
+  // se non ha toccato nessuna carrozza → chiudi fullscreen
+  if(!hit) toggleWheel();
+}
+
+function getCarColor(c){
+  if(!c||c.state==='free') return '#2e3250';
+  if(c.state==='excl') return '#e6c200';
+  if(c.state==='sel'||c.state==='new') return '#4f8ef7';
+  if(c.state==='run') return '#2ecc71';
+  if(c.state==='pau') return '#f39c12';
+  if(c.state==='warn') return '#ff2200';
+  return '#2e3250';
+}
+
+function drawWheel(){
+  const wrap=document.getElementById('wheelWrap');
+  const canvas=document.getElementById('wheelCanvas');
+  const size=wheelFull
+    ? Math.min(window.innerWidth, window.innerHeight-70)-20
+    : Math.min(wrap.clientWidth, 118)-4;
+  canvas.width=size; canvas.height=size;
+  const ctx=canvas.getContext('2d');
+  const cx=size/2, cy=size/2;
+  const R=size*0.38;
+  const cr=size*0.068;
+  const now=Date.now();
+
+  ctx.clearRect(0,0,size,size);
+
+  // Sfondo
+  ctx.beginPath();
+  ctx.arc(cx,cy,R+cr*1.4,0,Math.PI*2);
+  ctx.fillStyle='rgba(30,35,55,0.5)';
+  ctx.fill();
+
+  // Raggi struttura
+  for(let i=0;i<nCars;i++){
+    const a=-Math.PI/2+(i/nCars)*Math.PI*2;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.lineTo(cx+R*Math.cos(a),cy+R*Math.sin(a));
+    ctx.strokeStyle='#1e2340';
+    ctx.lineWidth=size*0.005;
+    ctx.stroke();
+  }
+
+  // Cerchio ruota
+  ctx.beginPath();
+  ctx.arc(cx,cy,R,0,Math.PI*2);
+  ctx.strokeStyle='#2e3a5a';
+  ctx.lineWidth=size*0.015;
+  ctx.stroke();
+
+  // Mozzo centrale
+  ctx.beginPath();
+  ctx.arc(cx,cy,size*0.055,0,Math.PI*2);
+  const hubGrad=ctx.createRadialGradient(cx,cy,0,cx,cy,size*0.055);
+  hubGrad.addColorStop(0,'#4f8ef7');
+  hubGrad.addColorStop(1,'#1a2a4a');
+  ctx.fillStyle=hubGrad;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx,cy,size*0.03,0,Math.PI*2);
+  ctx.fillStyle='#0f1117';
+  ctx.fill();
+
+  // Angolo globale ruota
+  const globalAngle=getWheelAngle();
+
+  // DUE PUNTI INGRESSO/USCITA in basso — adiacenti
+  // Ingresso sinistro: angolo π/2 + mezzo slot a sinistra
+  // Ingresso destro:   angolo π/2 + mezzo slot a destra
+  const slotAngle=(1/nCars)*Math.PI*2;
+  const entryR=Math.PI/2 - slotAngle*0.5; // dx (visivamente a destra)
+  const entryL=Math.PI/2 + slotAngle*0.5; // sx (visivamente a sinistra)
+
+  // Piattaforma terra
+  const groundY=cy+R+cr*1.8;
+  ctx.beginPath();
+  ctx.rect(cx-R*0.9, groundY-size*0.015, R*1.8, size*0.015);
+  ctx.fillStyle='#2e3a5a';
+  ctx.fill();
+
+  // Indicatori ingresso SX
+  const lx=cx+R*Math.cos(entryL), ly=cy+R*Math.sin(entryL);
+  ctx.beginPath();
+  ctx.moveTo(lx,ly+cr*0.8);
+  ctx.lineTo(lx,groundY-size*0.015);
+  ctx.strokeStyle='#ffdd00';
+  ctx.lineWidth=size*0.006;
+  ctx.setLineDash([size*0.02,size*0.015]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.font=`bold ${size*0.032}px sans-serif`;
+  ctx.fillStyle='#ffdd00';
+  ctx.textAlign='center';
+  ctx.fillText('◀ SX',lx,groundY+size*0.025);
+
+  // Indicatori ingresso DX
+  const rx=cx+R*Math.cos(entryR), ry=cy+R*Math.sin(entryR);
+  ctx.beginPath();
+  ctx.moveTo(rx,ry+cr*0.8);
+  ctx.lineTo(rx,groundY-size*0.015);
+  ctx.strokeStyle='#ffdd00';
+  ctx.lineWidth=size*0.006;
+  ctx.setLineDash([size*0.02,size*0.015]);
+  ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.fillStyle='#ffdd00';
+  ctx.textAlign='center';
+  ctx.fillText('DX ▶',rx,groundY+size*0.025);
+
+  // Zona sincronizzazione evidenziata (ore 3→6 = angolo 0→π/2)
+  if(wheelSyncActive){
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,R+cr*1.2,0,Math.PI/2);
+    ctx.closePath();
+    ctx.fillStyle='rgba(0,229,255,0.08)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(cx,cy,R+cr*1.2,0,Math.PI/2);
+    ctx.strokeStyle='#00e5ff';
+    ctx.lineWidth=size*0.006;
+    ctx.stroke();
+  }
+
+  // Carrozze — numerazione: 1 in basso a sx, cresce in senso ORARIO
+  for(let i=0;i<nCars;i++){
+    const c=cars[i];
+    const baseAngle=entryL-(i/nCars)*Math.PI*2;
+    const angle=baseAngle+globalAngle;
+    const x=cx+R*Math.cos(angle);
+    const y=cy+R*Math.sin(angle);
+
+    const isActive=c&&(c.state==='run'||c.state==='warn'||c.state==='pau'||c.state==='sel'||c.state==='new');
+    const isExcl=c&&c.state==='excl';
+    const color=getCarColor(c);
+    const r=isActive?cr*1.1:cr*0.85;
+
+    if(isActive){
+      ctx.beginPath();
+      ctx.moveTo(cx,cy); ctx.lineTo(x,y);
+      ctx.strokeStyle=color+'44';
+      ctx.lineWidth=size*0.007;
+      ctx.stroke();
+    }
+
+    ctx.shadowColor=isActive?color:'transparent';
+    ctx.shadowBlur=isActive?size*0.04:0;
+
+    ctx.save();
+    ctx.translate(x,y);
+    ctx.rotate(angle+Math.PI/2);
+
+    const grad=ctx.createLinearGradient(-r,-r,r,r);
+    if(isActive){
+      grad.addColorStop(0,color+'dd');
+      grad.addColorStop(1,color+'77');
+    } else if(isExcl){
+      grad.addColorStop(0,color+'bb');
+      grad.addColorStop(1,color+'55');
+    } else {
+      grad.addColorStop(0,'#2e3250');
+      grad.addColorStop(1,'#1a1d27');
+    }
+    ctx.beginPath();
+    ctx.roundRect(-r*0.75,-r*0.5,r*1.5,r*1.2,r*0.25);
+    ctx.fillStyle=grad;
+    ctx.fill();
+    ctx.strokeStyle=isActive?color:(isExcl?color:'#3a4060');
+    ctx.lineWidth=size*0.006;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.roundRect(-r*0.45,-r*0.3,r*0.9,r*0.6,r*0.15);
+    ctx.fillStyle=isActive?'rgba(200,240,255,0.25)':'rgba(100,120,180,0.1)';
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(0,-r*0.5); ctx.lineTo(0,-r*0.85);
+    ctx.strokeStyle=isActive?color:(isExcl?color:'#3a4060');
+    ctx.lineWidth=size*0.007;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(0,-r*0.85,size*0.012,0,Math.PI*2);
+    ctx.fillStyle=isActive?color:(isExcl?color:'#3a4060');
+    ctx.fill();
+
+    ctx.restore();
+    ctx.shadowBlur=0;
+
+    const fs=size*(isActive?0.052:0.042);
+    ctx.font=`bold ${fs}px sans-serif`;
+    ctx.fillStyle='#ffffff';
+    ctx.textAlign='center';
+    ctx.textBaseline='middle';
+    ctx.fillText(i+1,x,y+r*0.15);
+  }
+}
+
+/* OFFSET RUOTA */
+let wheelOffset=0;
+let wheelPausedAngle=0;  // angolo al momento della pausa
+let firstCarSelected=false;
+
+function setWheelFromCar(id){
+  // Mette la carrozza 'id' al cancelletto SX
+  // baseAngle della carrozza id = entryL + ((id-1)/nCars)*2π
+  // vogliamo che stia a entryL → offset = -((id-1)/nCars)*2π
+  wheelOffset = ((id-1)/nCars)*Math.PI*2;
+  wheelPausedAngle = wheelOffset;
+  firstCarSelected=true;
+}
+
+function getWheelAngle(atTime){
+  if(gPaused || !firstCarSelected){
+    // ferma: restituisce l'angolo al momento della pausa
+    return wheelPausedAngle;
+  }
+  // in corsa: usa il tempo trascorso dall'avvio, rispetto all'istante
+  // richiesto (di norma "adesso", ma la fotocamera può chiedere un
+  // istante preciso nel recente passato: il punto medio di un passaggio).
+  const now=(typeof atTime==='number')?atTime:Date.now();
+  // trova la carrozza attiva con startedAt più vecchio = riferimento avvio
+  let refStart=null;
+  cars.forEach(c=>{
+    if((c.state==='run'||c.state==='warn')&&c.startedAt){
+      if(refStart===null||c.startedAt<refStart) refStart=c.startedAt;
+    }
+  });
+  if(refStart===null) return wheelPausedAngle;
+  const elapsed=now-refStart;
+  return wheelPausedAngle + (elapsed/lapMs)*Math.PI*2;
+}
+
+/* TAP CARROZZA */
+/* Calcola l'angolo attuale di una carrozza (stessa formula usata nel
+   disegno della ruota e nel sincro). */
+function carAngle(id){
+  const i=id-1;
+  const slotAngle=(1/nCars)*Math.PI*2;
+  const entryL=Math.PI/2+slotAngle*0.5;
+  const baseAngle=entryL-(i/nCars)*Math.PI*2;
+  return baseAngle+getWheelAngle();
+}
+/* Fascia di 4 carrozze attorno a ore 6 (2 oltre il cancelletto DX,
+   2 oltre il cancelletto SX) — SOLO qui, durante una pausa con
+   carrozze già attive, la selezione di una carrozza libera fa
+   scattare subito l'allineamento a SX. */
+function inSnapBand(id){
+  const slotAngle=(1/nCars)*Math.PI*2;
+  let a=carAngle(id)%(Math.PI*2);
+  if(a<0) a+=Math.PI*2;
+  const lo=Math.PI/2-2*slotAngle, hi=Math.PI/2+2*slotAngle;
+  return a>=lo && a<=hi;
+}
+
+function tap(id){
+  if(id>nCars) return;
+  if(syncActive){ doSync(id); return; }
+  const c=cars[id-1];
+  if(c.state==='excl') return; // gialla: nessuna azione dal tap singolo
+  const anyActive=cars.some(x=>x.state==='run'||x.state==='warn'||x.state==='pau'||x.state==='sel'||x.state==='new');
+  // "In attesa" = già selezionata ma non ancora partita (sel/new).
+  // Se c'è già qualcun altro in attesa, questa è la SUA compagna:
+  // niente sincro proprio, la sua posizione (es. DX) emerge da sola
+  // dalla geometria della ruota, esattamente come la seconda carrozza
+  // della primissima selezione a ruota vuota.
+  const anyWaiting=cars.some(x=>x.state==='sel'||x.state==='new');
+  if(!gPaused){
+    if(c.state==='free'){
+      c.state='sel';
+      if(!anyActive) setWheelFromCar(id);
+    }
+    else if(c.state==='sel') c.state='free';
+  } else {
+    if(c.state==='free'){
+      c.state='new';
+      if(!anyActive){
+        setWheelFromCar(id); // ruota vuota → allinea come sempre, invariato
+      } else if(!anyWaiting && inSnapBand(id)){
+        // Prima carrozza di un NUOVO gruppo (nessun'altra in attesa):
+        // scatta a SX e riallinea tutte le carrozze già in giro.
+        const synced=performSync(id, Date.now());
+        toast(`🔄 Carrozza ${id} portata a SX (${synced} agg.)`,'c',2000);
+      }
+    }
+    else if(c.state==='new') c.state='free';
+    else if(c.state==='pau'){ c.state='free';c.remainingMs=null;c.warned=false; }
+  }
+  renderCard(id);
+}
+
+/* TASTO GRANDE */
+function updateBtn(){
+  const btn=document.getElementById('mainBtn');
+  const wBtn=document.getElementById('wheelMainBtn');
+  const wSync=document.getElementById('wheelSyncBtn');
+  if(gPaused){
+    btn.className='big paused';btn.textContent='⏸  IN PAUSA';
+    wBtn.className='wheel-big-btn paused';wBtn.textContent='⏸ IN PAUSA';
+  } else {
+    btn.className='big running';btn.textContent='▶  IN CORSA';
+    wBtn.className='wheel-big-btn running';wBtn.textContent='▶ IN CORSA';
+  }
+  if(syncActive) wSync.classList.add('active');
+  else wSync.classList.remove('active');
+}
+
+function mainAction(){
+  const now=Date.now();
+  if(!gPaused){
+    // → PAUSA
+    wheelPausedAngle=getWheelAngle(); // salva angolo ruota
+    gPaused=true;
+    cars.forEach(c=>{
+      if(c.state==='run'||c.state==='warn'){
+        c.pausedRemaining=c.remainingAtStart-(now-c.startedAt);
+        c.state='pau';
+      }
+    });
+  } else {
+    // → RIPRENDI
+    gPaused=false;
+    cars.forEach(c=>{
+      if(c.state==='pau'){
+        c.remainingAtStart=c.pausedRemaining;
+        c.startedAt=now;
+        if(c.pausedRemaining<=20000){
+          // Era (o è ancora) negli ultimi 20 secondi: torna rossa e
+          // riprende l'allarme da dove si era interrotto, invece di
+          // restare "verde" con l'allarme già segnato come dato e
+          // sparire di colpo senza preavviso. tick() rileverà da solo,
+          // con precisione al fotogramma, il momento in cui arriva a
+          // zero e chiamerà autoPause — nessun timer separato da
+          // riprogrammare qui.
+          c.state='warn'; c.warned=true;
+          beep('warn', c.id);
+        } else {
+          c.state='run'; c.warned=false;
+        }
+      } else if(c.state==='sel'||c.state==='new'){
+        if(!firstCarSelected) setWheelFromCar(c.id);
+        c.totalLaps=gLaps;
+        c.remainingAtStart=gLaps*lapMs;
+        c.startedAt=now; c.state='run'; c.warned=false;
+      }
+    });
+  }
+  updateBtn(); renderAll();
+  camResyncSilent();
+}
+
+/* AVVIA SINCRONIZZAZIONE (pulsante in basso) */
+function startSync(){
+  if(syncActive){ cancelSync(); return; }
+  syncActive=true; syncCountVal=6;
+  document.getElementById('syncBtn').classList.add('active');
+  document.getElementById('syncCountdown').classList.add('on');
+  document.getElementById('syncCountdown').textContent='6';
+  renderAll();
+  syncInterval=setInterval(()=>{
+    syncCountVal--;
+    document.getElementById('syncCountdown').textContent=syncCountVal;
+    if(syncCountVal<=0) cancelSync();
+  },1000);
+  syncTimer=setTimeout(cancelSync,6000);
+}
+function cancelSync(){
+  syncActive=false;
+  clearTimeout(syncTimer); clearInterval(syncInterval);
+  document.getElementById('syncBtn').classList.remove('active');
+  document.getElementById('syncCountdown').classList.remove('on');
+  renderAll();
+}
+/* PAUSA AUTO */
+function autoPause(refId){
+  if(!gPaused){
+    const now=Date.now();
+    // La carrozza in scadenza dovrebbe trovarsi ORA esattamente al
+    // cancelletto SX (è per questo che si ferma la ruota reale in
+    // questo momento, per far scendere le persone). La trattiamo come
+    // un vero punto di sincro: riallinea ruota + tutte le carrozze
+    // attive, invece di congelarsi a un angolo casuale.
+    const c0 = refId ? cars[refId-1] : null;
+    if(c0 && (c0.state==='run'||c0.state==='warn')){
+      performSync(refId, now);
+    } else {
+      wheelPausedAngle=getWheelAngle();
+      firstCarSelected=true;
+    }
+    gPaused=true;
+    cars.forEach(c=>{
+      if(c.state==='run'||c.state==='warn'){
+        const rem=Math.max(0,c.remainingAtStart-(now-c.startedAt));
+        if(rem<=2000){
+          // Ha DAVVERO finito i giri in questo stesso momento (o è una
+          // compagna partita insieme alla carrozza che ha scatenato la
+          // sosta, quindi finisce nello stesso istante): si libera
+          // subito. Una carrozza rossa ma con secondi VERI ancora
+          // rimasti (es. un'altra coppia partita più tardi, che deve
+          // ancora completare quasi un giro) NON deve spegnersi qui —
+          // resta in pausa, in attesa del suo vero turno.
+          c.state='free'; c.warned=false; c.remainingMs=null; c.startedAt=null;
+          stopWarnBeep(c.id);
+          beep('done');
+        } else {
+          c.pausedRemaining=rem;
+          c.state='pau';
+        }
+      }
+    });
+    updateBtn(); renderAll();
+    camResyncSilent();
+  }
+}
+
+/* TICK */
+function tick(){
+  const now=Date.now();
+  if(!gPaused){
+    cars.forEach(c=>{
+      if(c.state!=='run'&&c.state!=='warn') return;
+      const rem=c.remainingAtStart-(now-c.startedAt);
+      c.remainingMs=Math.max(0,rem);
+      if(c.remainingMs<=20000&&!c.warned){
+        c.warned=true; c.state='warn';
+        beep('warn', c.id);
+      }
+      if(c.remainingMs<=0){
+        // Unico punto che decide "è ora di fermarsi": preciso al
+        // fotogramma, non più un timer separato che poteva arrivare
+        // in ritardo e causare scatti o comportamenti incoerenti.
+        autoPause(c.id);
+      }
+    });
+  }
+  renderAll();
+  drawWheel();
+  requestAnimationFrame(tick);
+}
+
+/* AGGIUNGI GIRO */
+function addLap(id,e){
+  if(e) e.stopPropagation();
+  if(syncActive){ doSync(id); return; } // FIX: durante il sincro il + non deve
+  // aggiungere un giro per errore, deve comportarsi come il resto della card
+  const c=cars[id-1];
+  if(c.state!=='run'||c.lapAdded) return;
+  c.remainingAtStart+=lapMs;
+  if(c.remainingMs) c.remainingMs+=lapMs;
+  c.totalLaps+=1; c.lapAdded=true;
+  toast(`+1 giro carrozza ${id}`,'g',2000);
+  renderCard(id);
+}
+
+/* RENDER */
+function fmt(ms){
+  if(!ms||ms<0)ms=0;
+  const sec=Math.round(ms/1000),m=Math.floor(sec/60),s=sec%60;
+  return `${m}:${String(s).padStart(2,'0')}`;
+}
+function renderCard(id){
+  const c=cars[id-1];
+  const el=document.getElementById(`c-${id}`);
+  if(!el) return;
+  if(id>nCars){ el.className='card off'; el.innerHTML=`<div class="cn">${id}</div>`; return; }
+  let cls='card '+c.state;
+  if(syncActive) cls+=' sync-target';
+  el.className=cls;
+  const rem=c.state==='pau'?c.pausedRemaining:c.remainingMs;
+  const lLeft=Math.max(1,Math.ceil((rem||0)/lapMs));
+  const plusBtn=`<button class="plus-btn${c.lapAdded?' used':''}" onclick="addLap(${id},event)">+</button>`;
+  let lapsStr='',timeStr='';
+  if(c.state==='run'||c.state==='warn'||c.state==='pau'){
+    lapsStr=`${lLeft} gir${lLeft===1?'o':'i'}`;
+    timeStr=fmt(rem);
+  } else if(c.state==='sel'||c.state==='new'){
+    lapsStr=`${gLaps} giri`;
+  } else if(c.state==='excl'){
+    lapsStr='esclusa';
+  }
+  el.innerHTML=`
+    <div class="card-top"><div class="cn">${id}</div>${plusBtn}</div>
+    ${lapsStr?`<div class="cl">${lapsStr}</div>`:''}
+    ${timeStr?`<div class="ct">${timeStr}</div>`:''}
+  `;
+}
+function renderAll(){ cars.forEach(c=>renderCard(c.id)); }
+
+/* RESET */
+let resetTap=0;
+function resetAll(){
+  const now=Date.now();
+  if(now-resetTap<1500){
+    resetTap=0; gPaused=true; wheelOffset=0; wheelPausedAngle=0; firstCarSelected=false;
+    cancelSync(); initCars(); buildGrid(); updateBtn();
+    toast('↺ Reset effettuato','',2000);
+  } else {
+    resetTap=now;
+    toast('Tocca ancora per confermare','',1500);
+  }
+}
+
+/* BUILD */
+/* DOPPIO TAP → esclude/reincludi una carrozza LIBERA (gialla).
+   Un tap singolo viene applicato solo se non arriva un secondo tap
+   entro breve tempo; se arriva, si annulla il primo e si applica
+   l'esclusione al suo posto. Non serve durante il sincro (azione
+   immediata, come prima). */
+const tapTimers={};
+function cardClick(id){
+  if(syncActive){ tap(id); return; }
+  if(tapTimers[id]){
+    clearTimeout(tapTimers[id]);
+    delete tapTimers[id];
+    toggleExclude(id);
+  } else {
+    tapTimers[id]=setTimeout(()=>{
+      delete tapTimers[id];
+      tap(id);
+    },300);
+  }
+}
+function toggleExclude(id){
+  const c=cars[id-1];
+  if(c.state==='free'){
+    c.state='excl';
+    toast(`🟡 Carrozza ${id} esclusa`,'',1800);
+  } else if(c.state==='excl'){
+    c.state='free';
+    toast(`Carrozza ${id} di nuovo disponibile`,'',1800);
+  }
+  // In qualunque altro stato (in corsa, in pausa, selezionata) il
+  // doppio tap non ha effetto: si esclude solo una carrozza libera.
+  renderCard(id);
+}
+
+function buildGrid(){
+  const g=document.getElementById('grid'); g.innerHTML='';
+  cars.forEach(c=>{
+    const d=document.createElement('div');
+    d.id=`c-${c.id}`; d.className='card';
+    d.onclick=()=>cardClick(c.id);
+    g.appendChild(d); renderCard(c.id);
+  });
+}
+
+initCars(); loadSettings(); buildGrid(); updateBtn();
+drawWheel();
+requestAnimationFrame(tick);
+
+// Gestisce rotazione telefono
+window.addEventListener('resize', ()=>{
+  if(wheelFull){
+    // chiude fullscreen se ruota al momento del resize
+    wheelFull=false;
+    const w=document.getElementById('wheelWrap');
+    w.className='wheel-wrap mini';
+    w.querySelector('.wheel-hint').textContent='tocca per ingrandire';
+  }
+  drawWheel();
+});
+
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('/sw.js').catch(()=>{});
+}
+
+/* ============================================================
+   RILEVAMENTO AUTOMATICO PASSAGGIO VIA FOTOCAMERA
+   Il rilevatore sta fisicamente a metà strada tra i due
+   cancelletti. Non serve misurare nulla: il programma registra
+   l'istante in cui il segnale si copre e l'istante in cui si
+   scopre di nuovo — il PUNTO MEDIO tra i due è, per definizione,
+   il momento in cui il CENTRO della carrozza era esattamente a
+   metà tra i cancelletti. Da lì, le manca esattamente MEZZO
+   SCATTO (dedotto da numero carrozze e durata giro, mai da
+   misurare) per arrivare al cancelletto SX — stesso riferimento
+   usato da tutto il resto del programma.
+   ============================================================ */
+const camPanel=document.getElementById('camPanel');
+const camVideo=document.getElementById('camVideo');
+const camOverlay=document.getElementById('camOverlay');
+const camCtx=camOverlay.getContext('2d');
+const camStage=document.getElementById('camStage');
+const camPlaceholder=document.getElementById('camPlaceholder');
+const camSens=document.getElementById('camSens');
+const wheelCamNum=document.getElementById('wheelCamNum');
+const wheelCamDot=document.getElementById('wheelCamDot');
+const wheelCamBtn=document.getElementById('wheelCamBtn');
+const wheelCamCalibBtn=document.getElementById('wheelCamCalibBtn');
+
+let camStream=null, camRunning=false, camRafId=null;
+// Punto 4: non serve analizzare l'immagine ad ogni fotogramma (30-60
+// volte al secondo) per accorgersi del passaggio di una carrozza —
+// un passaggio dura ben più di un decimo di secondo. Analizzando
+// molto meno spesso si allegerisce il carico sul telefono, la ruota
+// disegnata resta fluida uguale (non è quella la parte pesante).
+let camLastAnalyzeTs=0;
+const CAM_ANALYZE_INTERVAL_MS=100; // ~10 analisi al secondo
+let camWasOccupato=false;
+let camOcclusionStart=null; // istante in cui il segnale si è coperto
+let camNextCarNum=1;
+let camPassTotal=0, camLapTotal=0;
+let camBox={x:0.40,y:0.55,w:0.20,h:0.20};
+let camDragging=false, camResizing=false, camDragOffX=0, camDragOffY=0;
+
+function toggleCamPanel(e){
+  if(e) e.stopPropagation();
+  const open=camPanel.classList.toggle('open');
+  if(wheelCamCalibBtn) wheelCamCalibBtn.classList.toggle('active', open);
+  if(open) setTimeout(resizeCamCanvas,50);
+  // La fotocamera NON si ferma chiudendo questo pannello: si accende e
+  // si spegne solo dal tasto sulla ruota ingrandita, così continua a
+  // rilevare i passaggi anche a pannello chiuso.
+}
+
+/* Trova quale carrozza, in base al modello geometrico del programma
+   base, si trova ORA esattamente al rilevatore (angolo centrale, a
+   metà tra i due cancelletti) — usa la stessa getWheelAngle() di
+   tutto il resto del programma, quindi funziona identica sia a ruota
+   in corsa che in pausa, sia che stia partendo che fermandosi. */
+function carAtDetectorNow(){
+  let best=1, bestDiff=Infinity;
+  for(let id=1; id<=nCars; id++){
+    let a=carAngle(id)%(Math.PI*2);
+    if(a<0) a+=Math.PI*2;
+    let diff=Math.abs(a-Math.PI/2);
+    diff=Math.min(diff, Math.PI*2-diff);
+    if(diff<bestDiff){ bestDiff=diff; best=id; }
+  }
+  return best;
+}
+
+function updateWheelCamNum(){
+  if(wheelCamNum) wheelCamNum.textContent = camRunning ? camNextCarNum : '—';
+}
+
+/* Riallinea il conteggio interno della fotocamera con la posizione
+   reale della ruota (utile se la fotocamera ha perso un passaggio,
+   es. per una mano davanti all'obiettivo). Non tocca la centratura
+   del riquadro né la sensibilità, che restano quelle impostate. */
+function camReset(){
+  camPassTotal=0; camLapTotal=0;
+  if(camRunning){
+    camNextCarNum=carAtDetectorNow();
+    updateWheelCamNum();
+  }
+  toast('↺ Conteggio fotocamera azzerato','',1800);
+}
+
+/* Riallineamento automatico e silenzioso: ad ogni fermata o ripartenza
+   della ruota (i punti in cui salita/discesa avvengono davvero, quindi
+   il riferimento è certo — lo stesso controllo che l'operatore farebbe
+   a vista), se la fotocamera è attiva il riferimento si ricalcola da
+   solo dalla posizione vera del programma base. Nessun messaggio: è
+   una correzione di routine, non un evento da segnalare. */
+function camResyncSilent(){
+  if(camRunning){
+    camNextCarNum=carAtDetectorNow();
+    updateWheelCamNum();
+  }
+}
+
+function toggleCamFromWheel(e){
+  e.stopPropagation();
+  if(camRunning) stopCam(); else startCam();
+}
+
+function resizeCamCanvas(){
+  camOverlay.width=camStage.clientWidth;
+  camOverlay.height=camStage.clientHeight;
+}
+window.addEventListener('resize', resizeCamCanvas);
+
+function camBoxPixels(){
+  const w=camOverlay.width, h=camOverlay.height;
+  return { x:camBox.x*w, y:camBox.y*h, w:camBox.w*w, h:camBox.h*h };
+}
+function drawCamOverlay(occupato){
+  camCtx.clearRect(0,0,camOverlay.width,camOverlay.height);
+  const b=camBoxPixels();
+  camCtx.strokeStyle = occupato ? '#e74c3c' : '#4f8ef7';
+  camCtx.lineWidth=3;
+  camCtx.setLineDash([6,4]);
+  camCtx.strokeRect(b.x,b.y,b.w,b.h);
+  camCtx.setLineDash([]);
+  camCtx.fillStyle = occupato ? '#e74c3c' : '#4f8ef7';
+  camCtx.fillRect(b.x+b.w-10, b.y+b.h-10, 14,14);
+}
+function camPointFromEvent(e){
+  const rect=camOverlay.getBoundingClientRect();
+  const t=e.touches?e.touches[0]:e;
+  return { x:t.clientX-rect.left, y:t.clientY-rect.top };
+}
+camOverlay.addEventListener('touchstart', camOnDown, {passive:false});
+camOverlay.addEventListener('mousedown', camOnDown);
+function camOnDown(e){
+  e.preventDefault(); e.stopPropagation();
+  const p=camPointFromEvent(e);
+  const b=camBoxPixels();
+  const hx=b.x+b.w, hy=b.y+b.h;
+  if(Math.hypot(p.x-hx,p.y-hy)<26){ camResizing=true; }
+  else if(p.x>=b.x&&p.x<=b.x+b.w&&p.y>=b.y&&p.y<=b.y+b.h){
+    camDragging=true; camDragOffX=p.x-b.x; camDragOffY=p.y-b.y;
+  }
+}
+window.addEventListener('touchmove', camOnMove, {passive:false});
+window.addEventListener('mousemove', camOnMove);
+function camOnMove(e){
+  if(!camDragging && !camResizing) return;
+  e.preventDefault();
+  const p=camPointFromEvent(e);
+  const w=camOverlay.width, h=camOverlay.height;
+  if(w===0||h===0) return;
+  if(camDragging){
+    let nx=(p.x-camDragOffX)/w, ny=(p.y-camDragOffY)/h;
+    nx=Math.max(0,Math.min(1-camBox.w,nx));
+    ny=Math.max(0,Math.min(1-camBox.h,ny));
+    camBox.x=nx; camBox.y=ny;
+  } else if(camResizing){
+    let nw=(p.x/w)-camBox.x, nh=(p.y/h)-camBox.y;
+    camBox.w=Math.max(0.05,Math.min(1-camBox.x,nw));
+    camBox.h=Math.max(0.05,Math.min(1-camBox.y,nh));
+  }
+}
+window.addEventListener('touchend', ()=>{camDragging=false;camResizing=false;});
+window.addEventListener('mouseup', ()=>{camDragging=false;camResizing=false;});
+
+const camSampleCanvas=document.createElement('canvas');
+const camSampleCtx=camSampleCanvas.getContext('2d',{willReadFrequently:true});
+
+function camAnalyze(){
+  if(!camRunning) return;
+  const nowRaf=performance.now();
+  if(nowRaf-camLastAnalyzeTs>=CAM_ANALYZE_INTERVAL_MS && camVideo.videoWidth){
+    camLastAnalyzeTs=nowRaf;
+    camSampleCanvas.width=camVideo.videoWidth;
+    camSampleCanvas.height=camVideo.videoHeight;
+    camSampleCtx.drawImage(camVideo,0,0);
+
+    const vw=camVideo.videoWidth, vh=camVideo.videoHeight;
+    const sw=camStage.clientWidth, sh=camStage.clientHeight;
+    const scale=Math.max(sw/vw, sh/vh);
+    const dispW=vw*scale, dispH=vh*scale;
+    const offX=(dispW-sw)/2, offY=(dispH-sh)/2;
+
+    const bx=(camBox.x*sw+offX)/scale;
+    const by=(camBox.y*sh+offY)/scale;
+    const bw=(camBox.w*sw)/scale;
+    const bh=(camBox.h*sh)/scale;
+
+    const rx=Math.max(0,Math.round(bx)), ry=Math.max(0,Math.round(by));
+    const rw=Math.min(vw-rx,Math.round(bw)), rh=Math.min(vh-ry,Math.round(bh));
+
+    let redRatio=0;
+    if(rw>0&&rh>0){
+      const data=camSampleCtx.getImageData(rx,ry,rw,rh).data;
+      let redCount=0,total=0;
+      for(let i=0;i<data.length;i+=16){
+        const r=data[i],g=data[i+1],b=data[i+2];
+        if(r>110 && r-g>35 && r-b>35) redCount++;
+        total++;
+      }
+      redRatio = total>0 ? redCount/total : 0;
+    }
+    const threshold=camSens.value/100;
+    const occupato = redRatio < threshold;
+
+    if(wheelCamDot) wheelCamDot.className='wheel-cam-dot '+(occupato?'occupato':'libero');
+
+    const nowTs=Date.now();
+    if(occupato && !camWasOccupato){
+      // Il segnale si è appena coperto: inizio del passaggio
+      camOcclusionStart=nowTs;
+    }
+    if(!occupato && camWasOccupato && camOcclusionStart!=null){
+      // Il segnale si è appena riscoperto: fine del passaggio.
+      // Il punto medio è il momento in cui il CENTRO della
+      // carrozza era esattamente a metà tra i cancelletti.
+      const tMid=(camOcclusionStart+nowTs)/2;
+      onPassageDetected(tMid);
+      camOcclusionStart=null;
+    }
+    camWasOccupato=occupato;
+    drawCamOverlay(occupato);
+  }
+  camRafId=requestAnimationFrame(camAnalyze);
+}
+
+function onPassageDetected(tMid){
+  camPassTotal++;
+  if(camPassTotal>nCars){ camPassTotal=1; camLapTotal++; }
+
+  // Attivarla dalla ruota ingrandita significa "sincronizza da sola ad
+  // ogni passaggio": non serve più una spunta separata per deciderlo.
+  const now=Date.now();
+  // Target = esattamente a metà tra i due cancelletti (π/2). Il
+  // "mezzo scatto" che manca per arrivare a SX è già incluso
+  // automaticamente nel fatto che performSync continuerà a far
+  // avanzare la ruota naturalmente da tMid fino ad ora — non va
+  // sommato a mano: lo gestisce da sé la generalizzazione con
+  // refTime. Qui basta indicare il target reale (il centro) e
+  // l'istante reale in cui la carrozza vi transitava (tMid).
+  const synced=performSync(camNextCarNum, now, Math.PI/2, tMid);
+  toast(`📷 Carrozza ${camNextCarNum} sincronizzata (${synced} agg.)`,'c',1800);
+  renderAll();
+
+  camNextCarNum = (camNextCarNum % nCars) + 1;
+  updateWheelCamNum();
+}
+
+async function startCam(){
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({
+      video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:960} },
+      audio:false
+    });
+    camVideo.srcObject=camStream;
+    await camVideo.play();
+    camPlaceholder.style.display='none';
+    resizeCamCanvas();
+    camRunning=true;
+    camWasOccupato=false;
+    camOcclusionStart=null;
+    // Riferimento iniziale preso SEMPRE dal modello geometrico del
+    // programma base, mai chiesto all'utente: funziona identico sia
+    // che la ruota stia partendo da ferma, sia che si stia fermando.
+    camNextCarNum=carAtDetectorNow();
+    if(wheelCamBtn){ wheelCamBtn.classList.add('active'); wheelCamBtn.textContent='📷 AUTO'; }
+    updateWheelCamNum();
+    camAnalyze();
+  }catch(err){
+    camPlaceholder.textContent='Impossibile accedere alla fotocamera. Controlla i permessi e che la pagina sia aperta con https.';
+    camPlaceholder.style.display='flex';
+  }
+}
+function stopCam(){
+  camRunning=false;
+  if(camRafId) cancelAnimationFrame(camRafId);
+  if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
+  camVideo.srcObject=null;
+  camPlaceholder.style.display='flex';
+  camPlaceholder.textContent='📷 Fotocamera spenta';
+  if(wheelCamBtn){ wheelCamBtn.classList.remove('active'); wheelCamBtn.textContent='📷 MANUALE'; }
+  if(wheelCamDot) wheelCamDot.className='wheel-cam-dot';
+  updateWheelCamNum();
+  camCtx.clearRect(0,0,camOverlay.width,camOverlay.height);
+}
+resizeCamCanvas();
+</script>
+</body>
+</html>
