@@ -114,6 +114,14 @@
   .wheel-cam-calib-btn{border:2px solid #555;border-radius:8px;background:#2a2a2a;color:var(--muted);
     font-size:14px;font-weight:800;padding:7px 9px;cursor:pointer;}
   .wheel-cam-calib-btn.active{background:#003344;border-color:#00e5ff;color:#00e5ff;}
+  .cam-toast{
+    display:none;position:absolute;left:50%;bottom:64px;transform:translateX(-50%);
+    background:#006677;color:#fff;font-weight:700;font-size:12.5px;
+    padding:7px 14px;border-radius:9px;white-space:nowrap;
+    opacity:0;pointer-events:none;transition:opacity .2s ease;z-index:15;
+  }
+  .wheel-wrap.full .cam-toast{display:block;}
+  .cam-toast.show{opacity:1;}
   .wheel-big-btn{
     padding:7px 18px;border:none;border-radius:8px;
     font-size:13px;font-weight:900;cursor:pointer;white-space:nowrap;
@@ -255,6 +263,7 @@
     <button class="wheel-sync-btn" id="wheelSyncBtn" onclick="toggleWheelSync(event)">🔄 SYNC</button>
     <button class="wheel-big-btn paused" id="wheelMainBtn" onclick="mainAction();event.stopPropagation()">⏸ IN PAUSA</button>
   </div>
+  <div class="cam-toast" id="camToastBox"></div>
 </div>
 
 <div class="grid-wrap"><div class="grid" id="grid"></div></div>
@@ -475,6 +484,7 @@ function doWheelSync(carIdx){
   if(btn){btn.classList.remove('active');btn.textContent='🔄 SYNC';}
   toast(`🔄 Carrozza ${refId} portata a ore 6 (${synced} agg.)`,'c',2500);
   renderAll();
+  camResyncSilent();
 }
 
 /* Sincronizzazione dal pulsante in basso (SINCRONIZZA + tocco numero) */
@@ -484,6 +494,7 @@ function doSync(refId){
   cancelSync();
   toast(`🔄 Carrozza ${refId} portata a ore 6 (${synced} agg.)`,'c',2500);
   renderAll();
+  camResyncSilent();
 }
 
 function toggleWheel(){
@@ -824,6 +835,7 @@ function tap(id){
         // scatta a SX e riallinea tutte le carrozze già in giro.
         const synced=performSync(id, Date.now());
         toast(`🔄 Carrozza ${id} portata a SX (${synced} agg.)`,'c',2000);
+        camResyncSilent();
       }
     }
     else if(c.state==='new') c.state='free';
@@ -890,6 +902,11 @@ function mainAction(){
   }
   updateBtn(); renderAll();
   camResyncSilent();
+  if(gPaused){
+    if(camAutoWanted && camRunning) stopCam(true);
+  } else {
+    if(camAutoWanted && !camRunning) startCam();
+  }
 }
 
 /* AVVIA SINCRONIZZAZIONE (pulsante in basso) */
@@ -953,6 +970,7 @@ function autoPause(refId){
     });
     updateBtn(); renderAll();
     camResyncSilent();
+    if(camAutoWanted && camRunning) stopCam(true);
   }
 }
 
@@ -1132,6 +1150,13 @@ const wheelCamBtn=document.getElementById('wheelCamBtn');
 const wheelCamCalibBtn=document.getElementById('wheelCamCalibBtn');
 
 let camStream=null, camRunning=false, camRafId=null;
+// Punto batteria: camAutoWanted è la SCELTA dell'operatore (tasto su
+// AUTO), camRunning è se la fotocamera è DAVVERO accesa in questo
+// momento. Sono cose diverse apposta: quando la ruota si ferma, la
+// fotocamera si spegne del tutto per risparmiare batteria (camRunning
+// torna false) ma camAutoWanted resta true, così alla ripartenza si
+// riaccende da sola, senza bisogno di ritoccare il tasto.
+let camAutoWanted=false;
 // Punto 4: non serve analizzare l'immagine ad ogni fotogramma (30-60
 // volte al secondo) per accorgersi del passaggio di una carrozza —
 // un passaggio dura ben più di un decimo di secondo. Analizzando
@@ -1156,25 +1181,50 @@ function toggleCamPanel(e){
   // rilevare i passaggi anche a pannello chiuso.
 }
 
-/* Trova quale carrozza, in base al modello geometrico del programma
-   base, si trova ORA esattamente al rilevatore (angolo centrale, a
-   metà tra i due cancelletti) — usa la stessa getWheelAngle() di
-   tutto il resto del programma, quindi funziona identica sia a ruota
-   in corsa che in pausa, sia che stia partendo che fermandosi. */
-function carAtDetectorNow(){
+/* Trova quale numero di carrozza la fotocamera deve aspettarsi come
+   PROSSIMA al rilevatore centrale — usando SEMPRE come riferimento
+   certo il cancelletto SX (mai il centro), esattamente come fa ogni
+   sincronizzazione manuale nel resto del programma.
+   Passo 1: trova quale carrozza si trova ORA al cancelletto SX, in
+   base al modello geometrico del programma base (stessa formula di
+   ogni altra sincronizzazione, funziona identica a ruota in corsa o
+   in pausa).
+   Passo 2: la prossima carrozza ad arrivare al rilevatore centrale è
+   sempre quella successiva (id+1) — il rilevatore sta a metà strada
+   tra i due cancelletti, cioè esattamente mezzo spicchio "indietro"
+   rispetto a SX, e mezzo spicchio è la distanza tra una carrozza e
+   la successiva vista dal centro. */
+function nextCarForCamera(){
+  const slotAngle=(1/nCars)*Math.PI*2;
+  const entryL=Math.PI/2+slotAngle*0.5;
   let best=1, bestDiff=Infinity;
   for(let id=1; id<=nCars; id++){
     let a=carAngle(id)%(Math.PI*2);
     if(a<0) a+=Math.PI*2;
-    let diff=Math.abs(a-Math.PI/2);
+    let diff=Math.abs(a-entryL);
     diff=Math.min(diff, Math.PI*2-diff);
     if(diff<bestDiff){ bestDiff=diff; best=id; }
   }
-  return best;
+  return (best % nCars) + 1;
 }
 
 function updateWheelCamNum(){
   if(wheelCamNum) wheelCamNum.textContent = camRunning ? camNextCarNum : '—';
+}
+
+/* Avviso dedicato ai passaggi rilevati dalla fotocamera: SOLO sulla
+   ruota ingrandita (sul tastierino non serve, l'utente non lo chiede
+   lì), in una posizione fissa sopra i tasti principali, lontana dalle
+   scritte SX/DX disegnate sulla ruota — a differenza degli avvisi
+   generici del programma (toast in basso), che restano dove sono. */
+let camToastTimer=null;
+function camToast(msg){
+  const el=document.getElementById('camToastBox');
+  if(!el || !wheelFull) return;
+  el.textContent=msg;
+  el.classList.add('show');
+  clearTimeout(camToastTimer);
+  camToastTimer=setTimeout(()=>el.classList.remove('show'),1800);
 }
 
 /* Riallinea il conteggio interno della fotocamera con la posizione
@@ -1184,28 +1234,43 @@ function updateWheelCamNum(){
 function camReset(){
   camPassTotal=0; camLapTotal=0;
   if(camRunning){
-    camNextCarNum=carAtDetectorNow();
+    camNextCarNum=nextCarForCamera();
     updateWheelCamNum();
   }
   toast('↺ Conteggio fotocamera azzerato','',1800);
 }
 
-/* Riallineamento automatico e silenzioso: ad ogni fermata o ripartenza
-   della ruota (i punti in cui salita/discesa avvengono davvero, quindi
-   il riferimento è certo — lo stesso controllo che l'operatore farebbe
-   a vista), se la fotocamera è attiva il riferimento si ricalcola da
-   solo dalla posizione vera del programma base. Nessun messaggio: è
-   una correzione di routine, non un evento da segnalare. */
+/* Riallineamento automatico e silenzioso: ad ogni sincronizzazione
+   "sicura" del programma base — manuale (SYNC, tastierino, aggancio
+   automatico selezionando una carrozza) o ai fermi/partenze reali
+   (autoPause, mainAction) — se la fotocamera è attiva il suo
+   riferimento si ricalcola da zero dal cancelletto SX, SEMPRE dopo e
+   MAI in conflitto con la correzione appena avvenuta: quella manuale
+   o dei fermi è sempre il riferimento "vero", la fotocamera la segue,
+   mai il contrario. Nessun messaggio: è una correzione di routine. */
 function camResyncSilent(){
   if(camRunning){
-    camNextCarNum=carAtDetectorNow();
+    camNextCarNum=nextCarForCamera();
     updateWheelCamNum();
   }
 }
 
 function toggleCamFromWheel(e){
   e.stopPropagation();
-  if(camRunning) stopCam(); else startCam();
+  if(camAutoWanted){
+    camAutoWanted=false;
+    if(camRunning){
+      stopCam(false);
+    } else {
+      // era spenta per risparmio batteria durante una pausa: il tasto
+      // deve comunque tornare su MANUALE, anche se non c'è nulla da fermare
+      if(wheelCamBtn){ wheelCamBtn.classList.remove('active'); wheelCamBtn.textContent='📷 MANUALE'; }
+      updateWheelCamNum();
+    }
+  } else {
+    camAutoWanted=true;
+    startCam();
+  }
 }
 
 function resizeCamCanvas(){
@@ -1344,7 +1409,7 @@ function onPassageDetected(tMid){
   // refTime. Qui basta indicare il target reale (il centro) e
   // l'istante reale in cui la carrozza vi transitava (tMid).
   const synced=performSync(camNextCarNum, now, Math.PI/2, tMid);
-  toast(`📷 Carrozza ${camNextCarNum} sincronizzata (${synced} agg.)`,'c',1800);
+  camToast(`📷 Carrozza ${camNextCarNum} sincronizzata (${synced} agg.)`);
   renderAll();
 
   camNextCarNum = (camNextCarNum % nCars) + 1;
@@ -1352,6 +1417,7 @@ function onPassageDetected(tMid){
 }
 
 async function startCam(){
+  if(camRunning) return; // già accesa, evita doppie richieste
   try{
     camStream=await navigator.mediaDevices.getUserMedia({
       video:{ facingMode:{ideal:'environment'}, width:{ideal:1280}, height:{ideal:960} },
@@ -1367,7 +1433,7 @@ async function startCam(){
     // Riferimento iniziale preso SEMPRE dal modello geometrico del
     // programma base, mai chiesto all'utente: funziona identico sia
     // che la ruota stia partendo da ferma, sia che si stia fermando.
-    camNextCarNum=carAtDetectorNow();
+    camNextCarNum=nextCarForCamera();
     if(wheelCamBtn){ wheelCamBtn.classList.add('active'); wheelCamBtn.textContent='📷 AUTO'; }
     updateWheelCamNum();
     camAnalyze();
@@ -1376,14 +1442,18 @@ async function startCam(){
     camPlaceholder.style.display='flex';
   }
 }
-function stopCam(){
+function stopCam(keepIntent){
   camRunning=false;
   if(camRafId) cancelAnimationFrame(camRafId);
   if(camStream){ camStream.getTracks().forEach(t=>t.stop()); camStream=null; }
   camVideo.srcObject=null;
   camPlaceholder.style.display='flex';
-  camPlaceholder.textContent='📷 Fotocamera spenta';
-  if(wheelCamBtn){ wheelCamBtn.classList.remove('active'); wheelCamBtn.textContent='📷 MANUALE'; }
+  camPlaceholder.textContent = keepIntent
+    ? '📷 In pausa con la ruota — si riaccende da sola alla ripartenza'
+    : '📷 Fotocamera spenta';
+  if(!keepIntent){
+    if(wheelCamBtn){ wheelCamBtn.classList.remove('active'); wheelCamBtn.textContent='📷 MANUALE'; }
+  }
   if(wheelCamDot) wheelCamDot.className='wheel-cam-dot';
   updateWheelCamNum();
   camCtx.clearRect(0,0,camOverlay.width,camOverlay.height);
